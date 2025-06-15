@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -86,8 +85,8 @@ const Friends: React.FC = () => {
   }, []);
 
   // New, more robust friend+profile list for wall shares
-  const { friends: friendProfiles, loading: friendProfilesLoading } = useFriendListWithProfiles(myUserId, myEmail);
-  const friendIds = friendProfiles.map((f) => f.profile.id);
+  const { friends: friendProfiles, loading: friendProfilesLoading } = useFriendListWithProfiles(myUserId);
+  const friendIds = friendProfiles.map((f) => f.id);
 
   // Wall Shares
   const { shares, loading: wallShareLoading, fetchShares, updateShare } = useWallShares(
