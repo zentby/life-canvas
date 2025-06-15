@@ -1,13 +1,14 @@
+
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tables } from "@/integrations/supabase/types";
-import { Link } from "react-router-dom";
-import { Switch } from "@/components/ui/switch";
 import { useWallShares } from "@/hooks/useWallShares";
 import { useFriendListWithProfiles } from "@/hooks/useFriendListWithProfiles";
+import AddFriendForm from "./friends/AddFriendForm";
+import IncomingRequests from "./friends/IncomingRequests";
+import OutgoingRequests from "./friends/OutgoingRequests";
+import FriendsList from "./friends/FriendsList";
 
 type FriendRequest = Tables<"friend_requests">;
 
@@ -171,104 +172,19 @@ const Friends: React.FC = () => {
   return (
     <div className="bg-white/80 rounded-xl px-6 py-4 shadow-lg max-w-lg w-full mt-4 mx-auto">
       <h2 className="text-xl font-semibold mb-3 text-center">Friends</h2>
-      {/* Add Friend Form */}
-      <form onSubmit={sendRequest} className="flex gap-2 mb-4">
-        <Input
-          placeholder="Enter user's email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
-          type="email"
-          required
-        />
-        <Button type="submit" disabled={loading}>
-          Add Friend
-        </Button>
-      </form>
-      {/* Incoming Requests */}
-      <div className="mb-3">
-        <h3 className="font-semibold text-sm mb-1">Incoming Requests:</h3>
-        <ul className="flex flex-col gap-1">
-          {incoming.length === 0 && <li className="text-xs text-gray-500">No incoming requests.</li>}
-          {incoming.map((req) => (
-            <li key={req.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
-              {/* Always show sender's email */}
-              <span className="text-gray-800">{req.sender_email || req.sender_id}</span>
-              <Button size="sm" onClick={() => acceptRequest(req.id)} disabled={loading}>
-                Accept
-              </Button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      {/* Outgoing Requests */}
-      <div className="mb-3">
-        <h3 className="font-semibold text-sm mb-1">Outgoing Requests:</h3>
-        <ul className="flex flex-col gap-1">
-          {requests.length === 0 && <li className="text-xs text-gray-500">No outgoing requests.</li>}
-          {requests.map((req) => (
-            <li key={req.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
-              {/* Outgoing always shows recipient email */}
-              <span className="text-gray-800">{req.recipient_email}</span>
-              <span className="text-xs text-gray-400">Pending</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      {/* Friends */}
-      <div>
-        <h3 className="font-semibold text-sm mb-1">Your Friends:</h3>
-        <ul className="flex flex-col gap-1">
-          {friendProfiles.length === 0 && <li className="text-xs text-gray-500">You have no friends yet.</li>}
-          {friendProfiles.map((f) => {
-            // f.profile.id is always the friend's user id
-            // f.profile.email is human-readable label
-            const friendId = f.profile.id;
-            const friendLabel = f.profile.email || friendId;
-            console.log('[DEBUG] Wall list: friendId', friendId, 'friendLabel', friendLabel, 'shareObj', shares[friendId]);
-
-            return (
-              <li key={f.friendRequest.id} className="flex flex-col md:flex-row md:items-center justify-between border rounded px-2 py-1 bg-white mb-1 gap-1 md:gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-800">{friendLabel}</span>
-                  {friendId && (
-                    <>
-                      <Switch
-                        checked={!!shares[friendId]?.shared}
-                        onCheckedChange={(value) => {
-                          updateShare(friendId, value);
-                        }}
-                        disabled={wallShareLoading || loading || friendProfilesLoading}
-                        className="ml-2"
-                        aria-label={`Share your wall with ${friendLabel}`}
-                      />
-                      <span className="text-xs text-gray-500">
-                        Share wall
-                      </span>
-                    </>
-                  )}
-                </div>
-                {friendId && shares[friendId]?.shared && (
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="bg-white/80 border-gray-200 shadow"
-                  >
-                    <Link to={`/wall/${friendId}`}>
-                      Visit Wall
-                    </Link>
-                  </Button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <AddFriendForm email={email} setEmail={setEmail} sendRequest={sendRequest} loading={loading} />
+      <IncomingRequests incoming={incoming} acceptRequest={acceptRequest} loading={loading} />
+      <OutgoingRequests requests={requests} />
+      <FriendsList
+        friendProfiles={friendProfiles}
+        shares={shares}
+        updateShare={updateShare}
+        wallShareLoading={wallShareLoading}
+        loading={loading}
+        friendProfilesLoading={friendProfilesLoading}
+      />
     </div>
   );
 };
 
 export default Friends;
-
-// NOTE: This file is getting very long. Please consider refactoring it into smaller files!
