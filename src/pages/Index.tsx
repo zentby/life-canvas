@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { LogOut, RefreshCw, Menu, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,7 @@ import AuthForm from '@/components/AuthForm';
 import PhotoUpload from '@/components/PhotoUpload';
 import PhotoWall from '@/components/PhotoWall';
 import BackgroundSelector from '@/components/BackgroundSelector';
+import Friends from '@/components/Friends';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -111,8 +111,13 @@ const Index = () => {
         <PhotoUpload onPhotoUploaded={handlePhotoUploaded} />
       </div>
 
+      {/* Friends Section */}
+      <div className="flex justify-center pt-32">
+        <Friends />
+      </div>
+
       {/* Photo Wall */}
-      <div className="pt-32">
+      <div className="pt-10">
         <PhotoWall refreshTrigger={refreshTrigger} />
       </div>
     </div>
