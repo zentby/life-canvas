@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useDraggable } from "./useDraggable";
+import PhotoTile from "./PhotoTile";
 
 type Photo = Tables<'photos'>;
 
@@ -175,72 +176,35 @@ const PhotoWall = ({ refreshTrigger }: PhotoWallProps) => {
   }
 
   return (
-    <div 
+    <div
       ref={wallRef}
       className="relative w-full h-screen overflow-hidden select-none"
-      style={{ touchAction: 'manipulation' }}
+      style={{ touchAction: "manipulation" }}
     >
       {placed.map((photo, idx) => {
         // Responsive Z-index via zstack
         const zIndex = 20 + zstack.indexOf(photo.id);
-
-        // Drag state per photo: either from manualPos or default (random placed pos)
-        const initial = manualPos[photo.id]
-          ? { x: manualPos[photo.id].x, y: manualPos[photo.id].y }
-          : { x: photo.position.left, y: photo.position.top };
-
-        const [pos, dragHandlers] = useDraggable(initial, {
-          onDragEnd: (final) => {
-            setManualPos((curr) => ({
-              ...curr,
-              [photo.id]: final
-            }));
-            bringPhotoToTop(photo.id);
-          }
-        });
+        const zTop = zstack[zstack.length - 1] === photo.id;
 
         return (
-          <div
+          <PhotoTile
             key={photo.id}
-            className="absolute group"
-            style={{
-              top: `${pos.y}px`,
-              left: `${pos.x}px`,
-              transform: `rotate(${photo.position.rotation}deg) scale(${photo.position.scale})`,
-              zIndex,
-              transition: 'transform 0.3s cubic-bezier(.47,1.64,.41,.8), box-shadow 0.2s, z-index 0s',
-              boxShadow: zstack[zstack.length - 1] === photo.id ? "0px 6px 24px 0 rgba(0,0,0,0.18)" : undefined,
-              cursor: 'grab',
-              touchAction: "none"
+            photo={photo}
+            publicUrl={photoUrls[photo.id]}
+            posRecord={manualPos[photo.id]}
+            position={photo.position}
+            zIndex={zIndex}
+            zTop={zTop}
+            onDragEnd={(final) => {
+              setManualPos((curr) => ({
+                ...curr,
+                [photo.id]: final,
+              }));
+              bringPhotoToTop(photo.id);
             }}
-            onClick={() => bringPhotoToTop(photo.id)}
-            {...dragHandlers}
-          >
-            <div className={`relative ${zstack[zstack.length-1] === photo.id ? 'ring-2 ring-white/90' : ''}`}>
-              <img
-                src={photoUrls[photo.id]}
-                alt={photo.file_name}
-                className="w-48 h-48 object-cover rounded-lg shadow-lg border-4 border-white group-hover:shadow-xl transition-all duration-300 select-none pointer-events-auto"
-                draggable={false}
-                style={{
-                  userSelect: 'none',
-                  filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.3))'
-                }}
-              />
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deletePhoto(photo);
-                }}
-                size="sm"
-                variant="destructive"
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-8 h-8 p-0"
-                title="Delete photo"
-              >
-                <Trash2 size={14} />
-              </Button>
-            </div>
-          </div>
+            bringPhotoToTop={() => bringPhotoToTop(photo.id)}
+            onDelete={() => deletePhoto(photo)}
+          />
         );
       })}
     </div>
