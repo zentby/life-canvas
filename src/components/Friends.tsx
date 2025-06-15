@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +16,7 @@ const Friends: React.FC = () => {
   const [friends, setFriends] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Record<string, string | null>>({}); // user_id: email
+  const [myUserId, setMyUserId] = useState<string | null>(null);
 
   // All relevant user ids to fetch from profiles table
   const getRelevantUserIds = (
@@ -31,8 +31,8 @@ const Friends: React.FC = () => {
     return Array.from(ids);
   };
 
-  // Map sender_id to email, fallback to sender_id if not found
-  const resolveEmail = (userId: string) => {
+  // Helper to resolve a userId to email (fallback to userId if not found)
+  const resolveEmail = (userId: string): string => {
     return profiles[userId] || userId;
   };
 
@@ -116,6 +116,13 @@ const Friends: React.FC = () => {
     // eslint-disable-next-line
   }, []);
 
+  // Get/cached user id (not just in fetchFriendRequests)
+  const loadUserId = async () => {
+    const auth = await supabase.auth.getUser();
+    setMyUserId(auth?.data.user?.id ?? null);
+  };
+  loadUserId();
+
   // Send a friend request
   const sendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,6 +193,7 @@ const Friends: React.FC = () => {
   return (
     <div className="bg-white/80 rounded-xl px-6 py-4 shadow-lg max-w-lg w-full mt-4 mx-auto">
       <h2 className="text-xl font-semibold mb-3 text-center">Friends</h2>
+      {/* Add Friend Form */}
       <form onSubmit={sendRequest} className="flex gap-2 mb-4">
         <Input
           placeholder="Enter user's email"
@@ -199,6 +207,7 @@ const Friends: React.FC = () => {
           Add Friend
         </Button>
       </form>
+      {/* Incoming Requests */}
       <div className="mb-3">
         <h3 className="font-semibold text-sm mb-1">Incoming Requests:</h3>
         <ul className="flex flex-col gap-1">
@@ -206,6 +215,7 @@ const Friends: React.FC = () => {
           {incoming.map((req) => (
             <li key={req.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
               <span className="text-gray-800">
+                {/* Show sender's email */}
                 {resolveEmail(req.sender_id)}
               </span>
               <Button size="sm" onClick={() => acceptRequest(req.id)} disabled={loading}>
@@ -215,29 +225,39 @@ const Friends: React.FC = () => {
           ))}
         </ul>
       </div>
+      {/* Outgoing Requests */}
       <div className="mb-3">
         <h3 className="font-semibold text-sm mb-1">Outgoing Requests:</h3>
         <ul className="flex flex-col gap-1">
           {requests.length === 0 && <li className="text-xs text-gray-500">No outgoing requests.</li>}
           {requests.map((req) => (
             <li key={req.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
+              {/* Outgoing always shows recipient email */}
               <span className="text-gray-800">{req.recipient_email}</span>
               <span className="text-xs text-gray-400">Pending</span>
             </li>
           ))}
         </ul>
       </div>
+      {/* Friends */}
       <div>
         <h3 className="font-semibold text-sm mb-1">Your Friends:</h3>
         <ul className="flex flex-col gap-1">
           {friends.length === 0 && <li className="text-xs text-gray-500">You have no friends yet.</li>}
-          {friends.map((f) => (
-            <li key={f.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
-              <span className="text-gray-800">
-                {resolveEmail(f.sender_id)} ↔ {f.recipient_email}
-              </span>
-            </li>
-          ))}
+          {friends.map((f) => {
+            if (!myUserId) return null;
+            // Show the "other" user's email:
+            const isMeSender = f.sender_id === myUserId;
+            // If I sent the request, recipient_email is friend:
+            const friendLabel = isMeSender
+              ? f.recipient_email
+              : resolveEmail(f.sender_id);
+            return (
+              <li key={f.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
+                <span className="text-gray-800">{friendLabel}</span>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>
