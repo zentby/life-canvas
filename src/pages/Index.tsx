@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Link } from "react-router-dom";
 
 const Index = () => {
   const { user, loading, signOut } = useAuth();
@@ -59,6 +60,13 @@ const Index = () => {
           {/* Desktop Button Actions */}
           <div className="hidden md:flex gap-3">
             <BackgroundSelector onBackgroundChange={handleBackgroundChange} />
+            <Link to="/friends">
+              <Button
+                className="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white border border-white/30"
+              >
+                Friends
+              </Button>
+            </Link>
             <Button
               onClick={shufflePhotos}
               className="bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white border border-white/30"
@@ -92,6 +100,11 @@ const Index = () => {
                     />
                   </div>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/friends" className="gap-2 flex items-center">
+                    Friends
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={shufflePhotos} className="gap-2">
                   <RefreshCw size={16} />
                   Shuffle
@@ -111,13 +124,10 @@ const Index = () => {
         <PhotoUpload onPhotoUploaded={handlePhotoUploaded} />
       </div>
 
-      {/* Friends Section */}
-      <div className="flex justify-center pt-32">
-        <Friends />
-      </div>
+      {/* Friends Section REMOVED */}
 
       {/* Photo Wall */}
-      <div className="pt-10">
+      <div className="pt-32">
         <PhotoWall refreshTrigger={refreshTrigger} />
       </div>
     </div>
