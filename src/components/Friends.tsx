@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tables } from "@/integrations/supabase/types";
 
 type FriendRequest = Tables<"friend_requests">;
+type Profile = Tables<"profiles">;
 
 const Friends: React.FC = () => {
   const { toast } = useToast();
@@ -15,51 +16,98 @@ const Friends: React.FC = () => {
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profiles, setProfiles] = useState<Record<string, string | null>>({}); // user_id: email
+
+  // All relevant user ids to fetch from profiles table
+  const getRelevantUserIds = (
+    requests: FriendRequest[],
+    incoming: FriendRequest[],
+    friends: FriendRequest[]
+  ): string[] => {
+    const ids = new Set<string>();
+    [...requests, ...incoming, ...friends].forEach(fr => {
+      if (fr.sender_id) ids.add(fr.sender_id);
+    });
+    return Array.from(ids);
+  };
+
+  // Map sender_id to email, fallback to sender_id if not found
+  const resolveEmail = (userId: string) => {
+    return profiles[userId] || userId;
+  };
 
   // Load sent requests, incoming requests, and accepted friends
   const fetchFriendRequests = async () => {
     setLoading(true);
-    // Fetch sent requests (I'm sender)
-    const { data: sent, error: sentErr } = await supabase
-      .from("friend_requests")
-      .select("*")
-      .eq("accepted", false);
 
-    // Fetch requests sent to me (I'm recipient) and accepted
-    const { data: incomingData, error: incomingErr } = await supabase
-      .from("friend_requests")
-      .select("*")
-      .eq("accepted", false);
-
-    // Fetch accepted (friends)
-    const { data: accepted, error: accErr } = await supabase
-      .from("friend_requests")
-      .select("*")
-      .eq("accepted", true);
-
-    // Filter based on my role
-    const user = supabase.auth.getUser
-      ? (await supabase.auth.getUser()).data.user
-      : null;
+    // Get logged in user's info
+    let user = null;
     let myEmail = null;
-    if (user && user.id) {
-      // Fetch email associated with this user
-      const res = await supabase.from("profiles").select("email").eq("id", user.id).maybeSingle();
-      myEmail = res?.data?.email;
+    if (supabase.auth.getUser) {
+      const auth = await supabase.auth.getUser();
+      user = auth?.data.user;
+      if (user?.id) {
+        const res = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("id", user.id)
+          .maybeSingle();
+        myEmail = res?.data?.email;
+      }
     }
-    setRequests(sent || []);
-    setIncoming(
-      (incomingData || []).filter(
-        (r) => r.recipient_email === myEmail && r.sender_id !== user?.id
-      )
+
+    // Fetch all friend_requests relevant to user: sent, received, accepted
+    // Outgoing/Pending requests: sent by me and not accepted
+    // Incoming requests: sent to me (by email) and not accepted
+    // Friends: either sent by me or received by me, and accepted
+
+    const { data: allRequests, error } = await supabase
+      .from("friend_requests")
+      .select("*");
+
+    if (error) {
+      toast({ title: "Error loading friend requests", description: error.message });
+      setLoading(false);
+      return;
+    }
+
+    const outgoing = (allRequests || []).filter(
+      (r) => !r.accepted && r.sender_id === user?.id
     );
-    setFriends(
-      (accepted || []).filter(
-        (r) =>
-          r.sender_id === user?.id ||
-          r.recipient_email === myEmail
-      )
+    const inc = (allRequests || []).filter(
+      (r) =>
+        !r.accepted &&
+        r.recipient_email === myEmail &&
+        r.sender_id !== user?.id // exclude sent by self
     );
+    const accepted = (allRequests || []).filter(
+      (r) =>
+        r.accepted &&
+        (r.sender_id === user?.id || r.recipient_email === myEmail)
+    );
+
+    // Now collect all user ids for profiles
+    const userIds = getRelevantUserIds(outgoing, inc, accepted);
+
+    let emails: Record<string, string | null> = {};
+    if (userIds.length > 0) {
+      // Fetch all profiles for these user IDs
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id,email")
+        .in("id", userIds);
+
+      if (profilesData) {
+        profilesData.forEach((p) => {
+          emails[p.id] = p.email;
+        });
+      }
+    }
+
+    setRequests(outgoing);
+    setIncoming(inc);
+    setFriends(accepted);
+    setProfiles(emails);
     setLoading(false);
   };
 
@@ -74,9 +122,11 @@ const Friends: React.FC = () => {
     setLoading(true);
 
     // Grab user id for sender
-    const user = supabase.auth.getUser
-      ? (await supabase.auth.getUser()).data.user
-      : null;
+    let user = null;
+    if (supabase.auth.getUser) {
+      const auth = await supabase.auth.getUser();
+      user = auth?.data.user;
+    }
     if (!user || !user.id) {
       toast({ title: "Error", description: "You must be signed in." });
       setLoading(false);
@@ -155,7 +205,9 @@ const Friends: React.FC = () => {
           {incoming.length === 0 && <li className="text-xs text-gray-500">No incoming requests.</li>}
           {incoming.map((req) => (
             <li key={req.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
-              <span className="text-gray-800">{req.sender_id}</span>
+              <span className="text-gray-800">
+                {resolveEmail(req.sender_id)}
+              </span>
               <Button size="sm" onClick={() => acceptRequest(req.id)} disabled={loading}>
                 Accept
               </Button>
@@ -182,7 +234,7 @@ const Friends: React.FC = () => {
           {friends.map((f) => (
             <li key={f.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
               <span className="text-gray-800">
-                {f.sender_id} ↔ {f.recipient_email}
+                {resolveEmail(f.sender_id)} ↔ {f.recipient_email}
               </span>
             </li>
           ))}
