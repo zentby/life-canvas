@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useDraggable } from "./useDraggable";
 
 type Photo = Tables<'photos'>;
 
@@ -26,6 +26,7 @@ const PhotoWall = ({ refreshTrigger }: PhotoWallProps) => {
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [placed, setPlaced] = useState<PlacedPhoto[]>([]);
   const [zstack, setZstack] = useState<string[]>([]);
+  const [manualPos, setManualPos] = useState<Record<string, { x: number; y: number }>>({});
   const wallRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
 
@@ -151,8 +152,8 @@ const PhotoWall = ({ refreshTrigger }: PhotoWallProps) => {
     }
   };
 
-  // Z-index management: bring image to top on click
-  const handlePhotoClick = (photoId: string) => {
+  // Z-index management: bring image to top on click or drag
+  const bringPhotoToTop = (photoId: string) => {
     setZstack(prev => [
       ...prev.filter(id => id !== photoId),
       photoId
@@ -180,22 +181,40 @@ const PhotoWall = ({ refreshTrigger }: PhotoWallProps) => {
       style={{ touchAction: 'manipulation' }}
     >
       {placed.map((photo, idx) => {
-        // Ensure photo is on top if recently clicked
+        // Responsive Z-index via zstack
         const zIndex = 20 + zstack.indexOf(photo.id);
+
+        // Drag state per photo: either from manualPos or default (random placed pos)
+        const initial = manualPos[photo.id]
+          ? { x: manualPos[photo.id].x, y: manualPos[photo.id].y }
+          : { x: photo.position.left, y: photo.position.top };
+
+        const [pos, dragHandlers] = useDraggable(initial, {
+          onDragEnd: (final) => {
+            setManualPos((curr) => ({
+              ...curr,
+              [photo.id]: final
+            }));
+            bringPhotoToTop(photo.id);
+          }
+        });
+
         return (
           <div
             key={photo.id}
             className="absolute group"
             style={{
-              top: `${photo.position.top}px`,
-              left: `${photo.position.left}px`,
+              top: `${pos.y}px`,
+              left: `${pos.x}px`,
               transform: `rotate(${photo.position.rotation}deg) scale(${photo.position.scale})`,
               zIndex,
               transition: 'transform 0.3s cubic-bezier(.47,1.64,.41,.8), box-shadow 0.2s, z-index 0s',
               boxShadow: zstack[zstack.length - 1] === photo.id ? "0px 6px 24px 0 rgba(0,0,0,0.18)" : undefined,
-              cursor: 'pointer'
+              cursor: 'grab',
+              touchAction: "none"
             }}
-            onClick={() => handlePhotoClick(photo.id)}
+            onClick={() => bringPhotoToTop(photo.id)}
+            {...dragHandlers}
           >
             <div className={`relative ${zstack[zstack.length-1] === photo.id ? 'ring-2 ring-white/90' : ''}`}>
               <img
