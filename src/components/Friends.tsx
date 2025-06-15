@@ -1,10 +1,12 @@
-
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tables } from "@/integrations/supabase/types";
+import { Link } from "react-router-dom";
+import { Switch } from "@/components/ui/switch";
+import { useWallShares } from "@/hooks/useWallShares";
 
 type FriendRequest = Tables<"friend_requests">;
 
@@ -17,6 +19,7 @@ const Friends: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [myEmail, setMyEmail] = useState<string | null>(null);
+  const [friendIds, setFriendIds] = useState<string[]>([]);
 
   // Fetch sent/received/accepted requests
   const fetchFriendRequests = async () => {
@@ -70,7 +73,7 @@ const Friends: React.FC = () => {
         r.recipient_email === _myEmail &&
         r.sender_id !== user?.id
     );
-    // Accepted friends
+    // Accepted friends: fill both sender_id and recipient_email matches
     const accepted = (allRequests || []).filter(
       (r) =>
         r.accepted &&
@@ -80,6 +83,41 @@ const Friends: React.FC = () => {
     setRequests(outgoing);
     setIncoming(inc);
     setFriends(accepted);
+
+    // Collect friend UUIDs for wall share toggles
+    if (_myUserId && _myEmail) {
+      const ids = accepted
+        .map((f) =>
+          f.sender_id === _myUserId
+            ? null // friend is recipient, must fetch their id from recipient_email via profiles
+            : f.sender_id
+        )
+        .filter(Boolean) as string[];
+      // Add lookup for those where I'm sender
+      const recipientsToFetch = accepted
+        .filter((f) => f.sender_id === _myUserId && f.recipient_email)
+        .map((f) => f.recipient_email);
+
+      // Get their uuids via profiles
+      let emailToIdMap: Record<string, string> = {};
+      if (recipientsToFetch.length) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id,email")
+          .in("email", recipientsToFetch);
+        if (profiles) {
+          for (const prof of profiles) {
+            emailToIdMap[prof.email] = prof.id;
+          }
+        }
+      }
+      const allFriendIds = [
+        ...ids,
+        ...recipientsToFetch.map((email) => emailToIdMap[email]).filter(Boolean),
+      ];
+      setFriendIds(allFriendIds);
+    }
+
     setLoading(false);
   };
 
@@ -87,6 +125,16 @@ const Friends: React.FC = () => {
     fetchFriendRequests();
     // eslint-disable-next-line
   }, []);
+
+  // Wall Shares
+  const { shares, loading: wallShareLoading, fetchShares, updateShare } = useWallShares(
+    myUserId,
+    friendIds
+  );
+  useEffect(() => {
+    fetchShares();
+    // eslint-disable-next-line
+  }, [friendIds, myUserId]);
 
   // Send a friend request -- include sender_email
   const sendRequest = async (e: React.FormEvent) => {
@@ -212,19 +260,61 @@ const Friends: React.FC = () => {
           {friends.length === 0 && <li className="text-xs text-gray-500">You have no friends yet.</li>}
           {friends.map((f) => {
             if (!myUserId || !myEmail) return null;
-            // Show the "other" user's email:
+            // Find friend's id and label
             const isMeSender = f.sender_id === myUserId;
             let friendLabel: string;
+            let friendId: string | undefined;
             if (isMeSender) {
-              // Friend is the recipient -- show their email
               friendLabel = f.recipient_email;
+              friendId = friendIds.find(
+                (id) => id !== myUserId && id !== undefined && id !== null
+              ) || undefined;
+              // More accurate mapping below
+              const idx = friendIds.findIndex(
+                (id) =>
+                  id !== myUserId &&
+                  id !== undefined &&
+                  id !== null
+              );
+              if (idx > -1) friendId = friendIds[idx];
+              // Otherwise, fallback: leave as undefined (toggle not shown)
             } else {
-              // Friend is the sender -- show their email
               friendLabel = f.sender_email || f.sender_id;
+              friendId = f.sender_id;
             }
             return (
-              <li key={f.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
-                <span className="text-gray-800">{friendLabel}</span>
+              <li key={f.id} className="flex flex-col md:flex-row md:items-center justify-between border rounded px-2 py-1 bg-white mb-1 gap-1 md:gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-800">{friendLabel}</span>
+                  {friendId && (
+                    <>
+                      <Switch
+                        checked={!!shares[friendId]?.shared}
+                        onCheckedChange={(value) => {
+                          updateShare(friendId, value);
+                        }}
+                        disabled={wallShareLoading || loading}
+                        className="ml-2"
+                        aria-label={`Share your wall with ${friendLabel}`}
+                      />
+                      <span className="text-xs text-gray-500">
+                        Share wall
+                      </span>
+                    </>
+                  )}
+                </div>
+                {friendId && shares[friendId]?.shared && (
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="bg-white/80 border-gray-200 shadow"
+                  >
+                    <Link to={`/wall/${friendId}`}>
+                      Visit Wall
+                    </Link>
+                  </Button>
+                )}
               </li>
             );
           })}
@@ -235,3 +325,5 @@ const Friends: React.FC = () => {
 };
 
 export default Friends;
+
+// NOTE: This file is getting very long. Please consider refactoring it into smaller files!

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import FriendsPage from "./pages/FriendsPage";
+import FriendWall from "@/pages/FriendWall"; // import the new page
 
 const queryClient = new QueryClient();
 
@@ -19,6 +20,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/friends" element={<FriendsPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/wall/:friendId" element={<FriendWall />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

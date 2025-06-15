@@ -89,6 +89,48 @@ export type Database = {
         }
         Relationships: []
       }
+      wall_shares: {
+        Row: {
+          created_at: string
+          friend_id: string
+          id: string
+          owner_id: string
+          shared: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          friend_id: string
+          id?: string
+          owner_id: string
+          shared?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          friend_id?: string
+          id?: string
+          owner_id?: string
+          shared?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wall_shares_friend_id_fkey"
+            columns: ["friend_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wall_shares_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

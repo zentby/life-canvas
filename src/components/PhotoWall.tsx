@@ -10,7 +10,9 @@ import PhotoTile from "./PhotoTile";
 type Photo = Tables<'photos'>;
 
 interface PhotoWallProps {
-  refreshTrigger: number;
+  refreshTrigger?: number;
+  wallOwnerId?: string; // Add support for displaying another user's wall
+  readOnly?: boolean;
 }
 
 type PlacedPhoto = Photo & {
@@ -22,7 +24,7 @@ const PHOTO_SIZE = 192; // 48*4 px; match w-48/h-48
 const getRandomRotation = () => Math.random() * 30 - 15; // -15 to +15 deg
 const getRandomScale = () => Math.random() * 0.4 + 0.8; // 0.8 - 1.2
 
-const PhotoWall = ({ refreshTrigger }: PhotoWallProps) => {
+const PhotoWall = ({ refreshTrigger, wallOwnerId, readOnly }: PhotoWallProps) => {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [placed, setPlaced] = useState<PlacedPhoto[]>([]);
@@ -33,9 +35,16 @@ const PhotoWall = ({ refreshTrigger }: PhotoWallProps) => {
 
   const loadPhotos = async () => {
     try {
+      let userId = wallOwnerId;
+      if (!userId) {
+        // If not specified, show signed-in user (my own wall)
+        const { data: user } = await supabase.auth.getUser();
+        userId = user?.user?.id;
+      }
       const { data, error } = await supabase
         .from('photos')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -122,6 +131,7 @@ const PhotoWall = ({ refreshTrigger }: PhotoWallProps) => {
   }, [photos, refreshTrigger]);
 
   const deletePhoto = async (photo: Photo) => {
+    if (readOnly) return; // no-op in readOnly
     try {
       // Delete from storage
       const { error: storageError } = await supabase.storage
@@ -196,19 +206,31 @@ const PhotoWall = ({ refreshTrigger }: PhotoWallProps) => {
             zIndex={zIndex}
             zTop={zTop}
             onDragEnd={(final) => {
+              if (readOnly) return; // no drag in readOnly mode
               setManualPos((curr) => ({
                 ...curr,
                 [photo.id]: final,
               }));
               bringPhotoToTop(photo.id);
             }}
-            bringPhotoToTop={() => bringPhotoToTop(photo.id)}
+            bringPhotoToTop={() => {
+              if (readOnly) return;
+              bringPhotoToTop(photo.id);
+            }}
             onDelete={() => deletePhoto(photo)}
           />
         );
       })}
+      {/* If readOnly, overlay a banner */}
+      {readOnly && (
+        <div className="absolute top-4 right-4 bg-white/90 px-4 py-2 rounded shadow-lg text-gray-700 font-medium z-50">
+          Read-only view
+        </div>
+      )}
     </div>
   );
 };
 
 export default PhotoWall;
+
+// NOTE: This file is getting long, please consider refactoring!
