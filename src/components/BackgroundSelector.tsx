@@ -11,6 +11,7 @@ import {
 
 interface BackgroundSelectorProps {
   onBackgroundChange: (gradient: string) => void;
+  asDropdownItem?: boolean; // For rendering inside dropdown on mobile
 }
 
 const gradients = [
@@ -48,7 +49,44 @@ const gradients = [
   }
 ];
 
-const BackgroundSelector = ({ onBackgroundChange }: BackgroundSelectorProps) => {
+const BackgroundSelector = ({
+  onBackgroundChange,
+  asDropdownItem = false,
+}: BackgroundSelectorProps) => {
+  // Mobile: render dropdown contents inline
+  if (asDropdownItem) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="ghost"
+            className="w-full justify-start gap-2 bg-transparent text-gray-800 hover:bg-gray-100"
+          >
+            <Palette size={16} />
+            Background
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-48 bg-white/95 z-50">
+          {gradients.map((gradient) => (
+            <DropdownMenuItem
+              key={gradient.name}
+              onClick={() => onBackgroundChange(gradient.value)}
+              className="cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div 
+                  className={`w-6 h-6 rounded-full bg-gradient-to-r ${gradient.value}`}
+                />
+                {gradient.name}
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  // Desktop / standalone button
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -60,7 +98,7 @@ const BackgroundSelector = ({ onBackgroundChange }: BackgroundSelectorProps) => 
           Background
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56">
+      <DropdownMenuContent className="w-56 bg-white/95 z-50">
         {gradients.map((gradient) => (
           <DropdownMenuItem
             key={gradient.name}
