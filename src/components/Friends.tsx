@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -15,52 +16,46 @@ const Friends: React.FC = () => {
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [profiles, setProfiles] = useState<Record<string, string | null>>({}); // user_id: email
+  const [friendEmails, setFriendEmails] = useState<Record<string, string | null>>({});
   const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [myEmail, setMyEmail] = useState<string | null>(null);
 
-  // All relevant user ids to fetch from profiles table
-  const getRelevantUserIds = (
-    requests: FriendRequest[],
-    incoming: FriendRequest[],
-    friends: FriendRequest[]
-  ): string[] => {
-    const ids = new Set<string>();
-    [...requests, ...incoming, ...friends].forEach(fr => {
-      if (fr.sender_id) ids.add(fr.sender_id);
-    });
-    return Array.from(ids);
+  // Helper: get email for a user id if it's your friend
+  const resolveFriendEmail = (userId: string): string => {
+    return friendEmails[userId] || userId;
   };
 
-  // Helper to resolve a userId to email (fallback to userId if not found)
-  const resolveEmail = (userId: string): string => {
-    return profiles[userId] || userId;
-  };
-
-  // Load sent requests, incoming requests, and accepted friends
+  // Fetch sent/received/accepted requests and friend emails
   const fetchFriendRequests = async () => {
     setLoading(true);
 
-    // Get logged in user's info
+    // Get logged in user
     let user = null;
-    let myEmail = null;
+    let _myEmail = null;
+    let _myUserId = null;
     if (supabase.auth.getUser) {
       const auth = await supabase.auth.getUser();
       user = auth?.data.user;
+      _myUserId = user?.id;
+      setMyUserId(_myUserId ?? null);
       if (user?.id) {
         const res = await supabase
           .from("profiles")
           .select("email")
           .eq("id", user.id)
           .maybeSingle();
-        myEmail = res?.data?.email;
+        _myEmail = res?.data?.email ?? null;
+        setMyEmail(_myEmail);
       }
     }
 
-    // Fetch all friend_requests relevant to user: sent, received, accepted
-    // Outgoing/Pending requests: sent by me and not accepted
-    // Incoming requests: sent to me (by email) and not accepted
-    // Friends: either sent by me or received by me, and accepted
+    // Catch not signed in
+    if (!user || !user.id) {
+      setLoading(false);
+      return;
+    }
 
+    // Fetch all friend_requests
     const { data: allRequests, error } = await supabase
       .from("friend_requests")
       .select("*");
@@ -77,37 +72,43 @@ const Friends: React.FC = () => {
     const inc = (allRequests || []).filter(
       (r) =>
         !r.accepted &&
-        r.recipient_email === myEmail &&
-        r.sender_id !== user?.id // exclude sent by self
+        r.recipient_email === _myEmail &&
+        r.sender_id !== user?.id
     );
     const accepted = (allRequests || []).filter(
       (r) =>
         r.accepted &&
-        (r.sender_id === user?.id || r.recipient_email === myEmail)
+        (r.sender_id === user?.id || r.recipient_email === _myEmail)
     );
-
-    // Now collect all user ids for profiles
-    const userIds = getRelevantUserIds(outgoing, inc, accepted);
-
-    let emails: Record<string, string | null> = {};
-    if (userIds.length > 0) {
-      // Fetch all profiles for these user IDs
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("id,email")
-        .in("id", userIds);
-
-      if (profilesData) {
-        profilesData.forEach((p) => {
-          emails[p.id] = p.email;
-        });
-      }
-    }
 
     setRequests(outgoing);
     setIncoming(inc);
     setFriends(accepted);
-    setProfiles(emails);
+
+    // Fetch all friend profiles (id/email) via RPC
+    let _friendEmails: Record<string, string | null> = {};
+    if (_myUserId) {
+      const { data: friendsData, error: rpcError } = await supabase.rpc(
+        "get_friend_profiles",
+        { my_user_id: _myUserId }
+      );
+      if (rpcError) {
+        toast({
+          title: "Error",
+          description: "Could not load friend emails: " + rpcError.message,
+          variant: "destructive",
+        });
+      } else if (friendsData) {
+        // friendsData: { id, email }[]
+        for (const f of friendsData) {
+          _friendEmails[f.id] = f.email ?? null;
+        }
+        setFriendEmails(_friendEmails);
+      }
+    } else {
+      setFriendEmails({});
+    }
+
     setLoading(false);
   };
 
@@ -116,13 +117,6 @@ const Friends: React.FC = () => {
     // eslint-disable-next-line
   }, []);
 
-  // Get/cached user id (not just in fetchFriendRequests)
-  const loadUserId = async () => {
-    const auth = await supabase.auth.getUser();
-    setMyUserId(auth?.data.user?.id ?? null);
-  };
-  loadUserId();
-
   // Send a friend request
   const sendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,9 +124,18 @@ const Friends: React.FC = () => {
 
     // Grab user id for sender
     let user = null;
+    let currEmail = null;
     if (supabase.auth.getUser) {
       const auth = await supabase.auth.getUser();
       user = auth?.data.user;
+      if (user?.id) {
+        const res = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("id", user.id)
+          .maybeSingle();
+        currEmail = res?.data?.email ?? null;
+      }
     }
     if (!user || !user.id) {
       toast({ title: "Error", description: "You must be signed in." });
@@ -141,13 +144,7 @@ const Friends: React.FC = () => {
     }
 
     // Can't send to self
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profile?.email === email) {
+    if (currEmail === email) {
       toast({ title: "Error", description: "You can't add yourself!" });
       setLoading(false);
       return;
@@ -215,8 +212,8 @@ const Friends: React.FC = () => {
           {incoming.map((req) => (
             <li key={req.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
               <span className="text-gray-800">
-                {/* Show sender's email */}
-                {resolveEmail(req.sender_id)}
+                {/* Show sender's email (from friendEmails if a friend, else sender_id as fallback) */}
+                {resolveFriendEmail(req.sender_id)}
               </span>
               <Button size="sm" onClick={() => acceptRequest(req.id)} disabled={loading}>
                 Accept
@@ -248,10 +245,21 @@ const Friends: React.FC = () => {
             if (!myUserId) return null;
             // Show the "other" user's email:
             const isMeSender = f.sender_id === myUserId;
-            // If I sent the request, recipient_email is friend:
-            const friendLabel = isMeSender
-              ? f.recipient_email
-              : resolveEmail(f.sender_id);
+            let friendId: string | null = null;
+            if (isMeSender) {
+              // I am the sender, friend is the recipient (need to look up id by their email)
+              // Try to find a friend id in friendEmails that matches this recipient_email
+              friendId =
+                Object.entries(friendEmails).find(
+                  ([, e]) => e === f.recipient_email
+                )?.[0] ?? null;
+            } else {
+              // I am the recipient, friend is the sender
+              friendId = f.sender_id;
+            }
+            const friendLabel = friendId
+              ? resolveFriendEmail(friendId)
+              : f.recipient_email;
             return (
               <li key={f.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
                 <span className="text-gray-800">{friendLabel}</span>

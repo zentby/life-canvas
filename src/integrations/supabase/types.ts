@@ -91,7 +91,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_friend_profiles: {
+        Args: { my_user_id: string }
+        Returns: {
+          id: string
+          email: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
