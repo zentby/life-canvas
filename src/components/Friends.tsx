@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Tables } from "@/integrations/supabase/types";
@@ -86,17 +86,21 @@ const Friends: React.FC = () => {
 
   // New, more robust friend+profile list for wall shares
   const { friends: friendProfiles, loading: friendProfilesLoading } = useFriendListWithProfiles(myUserId);
-  const friendIds = friendProfiles.map((f) => f.id);
+
+  // UseMemo to create a stable key for wallShares fetches
+  const friendIds = useMemo(() => friendProfiles.map((f) => f.id), [friendProfiles]);
 
   // Wall Shares
   const { shares, loading: wallShareLoading, fetchShares, updateShare } = useWallShares(
     myUserId,
     friendIds
   );
+  // Only fetch wall shares when friendIds length or content actually change
   useEffect(() => {
+    // Stringify for stable dependency. Avoid deep equality issues causing loops.
     fetchShares();
     // eslint-disable-next-line
-  }, [friendIds, myUserId]);
+  }, [myUserId, JSON.stringify(friendIds)]);
 
   // Send a friend request -- include sender_email
   const sendRequest = async (e: React.FormEvent) => {

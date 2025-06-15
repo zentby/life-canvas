@@ -34,7 +34,7 @@ const FriendsList: React.FC<FriendsListProps> = ({
         {friendProfiles.map((f) => {
           const friendId = f.id;
           const friendLabel = f.email || friendId;
-          console.log('[DEBUG] Wall list: friendId', friendId, 'friendLabel', friendLabel, 'shareObj', shares[friendId]);
+          // [DEBUG] log removed
 
           return (
             <li key={friendId} className="flex flex-col md:flex-row md:items-center justify-between border rounded px-2 py-1 bg-white mb-1 gap-1 md:gap-3">
