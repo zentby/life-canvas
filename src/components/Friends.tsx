@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Tables } from "@/integrations/supabase/types";
 
 type FriendRequest = Tables<"friend_requests">;
-type Profile = Tables<"profiles">;
 
 const Friends: React.FC = () => {
   const { toast } = useToast();
@@ -16,16 +15,10 @@ const Friends: React.FC = () => {
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
   const [friends, setFriends] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [friendEmails, setFriendEmails] = useState<Record<string, string | null>>({});
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [myEmail, setMyEmail] = useState<string | null>(null);
 
-  // Helper: get email for a user id if it's your friend
-  const resolveFriendEmail = (userId: string): string => {
-    return friendEmails[userId] || userId;
-  };
-
-  // Fetch sent/received/accepted requests and friend emails
+  // Fetch sent/received/accepted requests
   const fetchFriendRequests = async () => {
     setLoading(true);
 
@@ -66,15 +59,18 @@ const Friends: React.FC = () => {
       return;
     }
 
+    // Outgoing: you sent requests, not yet accepted
     const outgoing = (allRequests || []).filter(
       (r) => !r.accepted && r.sender_id === user?.id
     );
+    // Incoming: sent to you (by others) and not yet accepted
     const inc = (allRequests || []).filter(
       (r) =>
         !r.accepted &&
         r.recipient_email === _myEmail &&
         r.sender_id !== user?.id
     );
+    // Accepted friends
     const accepted = (allRequests || []).filter(
       (r) =>
         r.accepted &&
@@ -84,31 +80,6 @@ const Friends: React.FC = () => {
     setRequests(outgoing);
     setIncoming(inc);
     setFriends(accepted);
-
-    // Fetch all friend profiles (id/email) via RPC
-    let _friendEmails: Record<string, string | null> = {};
-    if (_myUserId) {
-      const { data: friendsData, error: rpcError } = await supabase.rpc(
-        "get_friend_profiles",
-        { my_user_id: _myUserId }
-      );
-      if (rpcError) {
-        toast({
-          title: "Error",
-          description: "Could not load friend emails: " + rpcError.message,
-          variant: "destructive",
-        });
-      } else if (friendsData) {
-        // friendsData: { id, email }[]
-        for (const f of friendsData) {
-          _friendEmails[f.id] = f.email ?? null;
-        }
-        setFriendEmails(_friendEmails);
-      }
-    } else {
-      setFriendEmails({});
-    }
-
     setLoading(false);
   };
 
@@ -117,12 +88,12 @@ const Friends: React.FC = () => {
     // eslint-disable-next-line
   }, []);
 
-  // Send a friend request
+  // Send a friend request -- include sender_email
   const sendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Grab user id for sender
+    // Grab user id/email for sender
     let user = null;
     let currEmail = null;
     if (supabase.auth.getUser) {
@@ -150,10 +121,10 @@ const Friends: React.FC = () => {
       return;
     }
 
-    // Create request
     const { error } = await supabase.from("friend_requests").insert([
       {
         sender_id: user.id,
+        sender_email: currEmail,
         recipient_email: email,
       },
     ]);
@@ -211,10 +182,8 @@ const Friends: React.FC = () => {
           {incoming.length === 0 && <li className="text-xs text-gray-500">No incoming requests.</li>}
           {incoming.map((req) => (
             <li key={req.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
-              <span className="text-gray-800">
-                {/* Show sender's email (from friendEmails if a friend, else sender_id as fallback) */}
-                {resolveFriendEmail(req.sender_id)}
-              </span>
+              {/* Always show sender's email */}
+              <span className="text-gray-800">{req.sender_email || req.sender_id}</span>
               <Button size="sm" onClick={() => acceptRequest(req.id)} disabled={loading}>
                 Accept
               </Button>
@@ -242,24 +211,17 @@ const Friends: React.FC = () => {
         <ul className="flex flex-col gap-1">
           {friends.length === 0 && <li className="text-xs text-gray-500">You have no friends yet.</li>}
           {friends.map((f) => {
-            if (!myUserId) return null;
+            if (!myUserId || !myEmail) return null;
             // Show the "other" user's email:
             const isMeSender = f.sender_id === myUserId;
-            let friendId: string | null = null;
+            let friendLabel: string;
             if (isMeSender) {
-              // I am the sender, friend is the recipient (need to look up id by their email)
-              // Try to find a friend id in friendEmails that matches this recipient_email
-              friendId =
-                Object.entries(friendEmails).find(
-                  ([, e]) => e === f.recipient_email
-                )?.[0] ?? null;
+              // Friend is the recipient -- show their email
+              friendLabel = f.recipient_email;
             } else {
-              // I am the recipient, friend is the sender
-              friendId = f.sender_id;
+              // Friend is the sender -- show their email
+              friendLabel = f.sender_email || f.sender_id;
             }
-            const friendLabel = friendId
-              ? resolveFriendEmail(friendId)
-              : f.recipient_email;
             return (
               <li key={f.id} className="flex items-center justify-between border rounded px-2 py-1 bg-white">
                 <span className="text-gray-800">{friendLabel}</span>

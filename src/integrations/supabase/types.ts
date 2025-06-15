@@ -15,6 +15,7 @@ export type Database = {
           created_at: string | null
           id: string
           recipient_email: string
+          sender_email: string | null
           sender_id: string
         }
         Insert: {
@@ -22,6 +23,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           recipient_email: string
+          sender_email?: string | null
           sender_id: string
         }
         Update: {
@@ -29,6 +31,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           recipient_email?: string
+          sender_email?: string | null
           sender_id?: string
         }
         Relationships: [
