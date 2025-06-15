@@ -7,6 +7,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { Link } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { useWallShares } from "@/hooks/useWallShares";
+import { useFriendListWithProfiles } from "@/hooks/useFriendListWithProfiles";
 
 type FriendRequest = Tables<"friend_requests">;
 
@@ -15,11 +16,9 @@ const Friends: React.FC = () => {
   const [email, setEmail] = useState("");
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
-  const [friends, setFriends] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [myEmail, setMyEmail] = useState<string | null>(null);
-  const [friendIds, setFriendIds] = useState<string[]>([]);
 
   // Fetch sent/received/accepted requests
   const fetchFriendRequests = async () => {
@@ -125,6 +124,10 @@ const Friends: React.FC = () => {
     fetchFriendRequests();
     // eslint-disable-next-line
   }, []);
+
+  // New, more robust friend+profile list for wall shares
+  const { friends: friendProfiles, loading: friendProfilesLoading } = useFriendListWithProfiles(myUserId, myEmail);
+  const friendIds = friendProfiles.map((f) => f.profile.id);
 
   // Wall Shares
   const { shares, loading: wallShareLoading, fetchShares, updateShare } = useWallShares(
@@ -257,33 +260,16 @@ const Friends: React.FC = () => {
       <div>
         <h3 className="font-semibold text-sm mb-1">Your Friends:</h3>
         <ul className="flex flex-col gap-1">
-          {friends.length === 0 && <li className="text-xs text-gray-500">You have no friends yet.</li>}
-          {friends.map((f) => {
-            if (!myUserId || !myEmail) return null;
-            // Find friend's id and label
-            const isMeSender = f.sender_id === myUserId;
-            let friendLabel: string;
-            let friendId: string | undefined;
-            if (isMeSender) {
-              friendLabel = f.recipient_email;
-              friendId = friendIds.find(
-                (id) => id !== myUserId && id !== undefined && id !== null
-              ) || undefined;
-              // More accurate mapping below
-              const idx = friendIds.findIndex(
-                (id) =>
-                  id !== myUserId &&
-                  id !== undefined &&
-                  id !== null
-              );
-              if (idx > -1) friendId = friendIds[idx];
-              // Otherwise, fallback: leave as undefined (toggle not shown)
-            } else {
-              friendLabel = f.sender_email || f.sender_id;
-              friendId = f.sender_id;
-            }
+          {friendProfiles.length === 0 && <li className="text-xs text-gray-500">You have no friends yet.</li>}
+          {friendProfiles.map((f) => {
+            // f.profile.id is always the friend's user id
+            // f.profile.email is human-readable label
+            const friendId = f.profile.id;
+            const friendLabel = f.profile.email || friendId;
+            console.log('[DEBUG] Wall list: friendId', friendId, 'friendLabel', friendLabel, 'shareObj', shares[friendId]);
+
             return (
-              <li key={f.id} className="flex flex-col md:flex-row md:items-center justify-between border rounded px-2 py-1 bg-white mb-1 gap-1 md:gap-3">
+              <li key={f.friendRequest.id} className="flex flex-col md:flex-row md:items-center justify-between border rounded px-2 py-1 bg-white mb-1 gap-1 md:gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-gray-800">{friendLabel}</span>
                   {friendId && (
@@ -293,7 +279,7 @@ const Friends: React.FC = () => {
                         onCheckedChange={(value) => {
                           updateShare(friendId, value);
                         }}
-                        disabled={wallShareLoading || loading}
+                        disabled={wallShareLoading || loading || friendProfilesLoading}
                         className="ml-2"
                         aria-label={`Share your wall with ${friendLabel}`}
                       />
