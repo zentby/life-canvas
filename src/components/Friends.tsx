@@ -20,7 +20,7 @@ const Friends: React.FC = () => {
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [myEmail, setMyEmail] = useState<string | null>(null);
 
-  // Fetch sent/received/accepted requests
+  // Fetch sent/received requests
   const fetchFriendRequests = async () => {
     setLoading(true);
 
@@ -72,50 +72,9 @@ const Friends: React.FC = () => {
         r.recipient_email === _myEmail &&
         r.sender_id !== user?.id
     );
-    // Accepted friends: fill both sender_id and recipient_email matches
-    const accepted = (allRequests || []).filter(
-      (r) =>
-        r.accepted &&
-        (r.sender_id === user?.id || r.recipient_email === _myEmail)
-    );
 
     setRequests(outgoing);
     setIncoming(inc);
-    setFriends(accepted);
-
-    // Collect friend UUIDs for wall share toggles
-    if (_myUserId && _myEmail) {
-      const ids = accepted
-        .map((f) =>
-          f.sender_id === _myUserId
-            ? null // friend is recipient, must fetch their id from recipient_email via profiles
-            : f.sender_id
-        )
-        .filter(Boolean) as string[];
-      // Add lookup for those where I'm sender
-      const recipientsToFetch = accepted
-        .filter((f) => f.sender_id === _myUserId && f.recipient_email)
-        .map((f) => f.recipient_email);
-
-      // Get their uuids via profiles
-      let emailToIdMap: Record<string, string> = {};
-      if (recipientsToFetch.length) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id,email")
-          .in("email", recipientsToFetch);
-        if (profiles) {
-          for (const prof of profiles) {
-            emailToIdMap[prof.email] = prof.id;
-          }
-        }
-      }
-      const allFriendIds = [
-        ...ids,
-        ...recipientsToFetch.map((email) => emailToIdMap[email]).filter(Boolean),
-      ];
-      setFriendIds(allFriendIds);
-    }
 
     setLoading(false);
   };
